@@ -1,7 +1,7 @@
-name: MAKKIE - Permanent Static Build
+name: MAKKIE - Stable On-Demand Build
 
 on:
-  workflow_dispatch: # Allows manual triggering
+  workflow_dispatch: # Manual trigger only via GitHub Actions tab
 
 jobs:
   publish:
@@ -10,10 +10,26 @@ jobs:
       - name: Checkout YOUR repo
         uses: actions/checkout@v4
 
-      - name: Clone Original EVCC
+      - name: Clone Stable EVCC
         run: |
-          # Clone the latest source code from the official repository
-          git clone https://github.com/evcc-io/evcc.git evcc_src
+          # Clone with tags to ensure we can see all version history
+          git clone --tags https://github.com/evcc-io/evcc.git evcc_src
+          cd evcc_src
+          
+          # 1. Sort tags by creation date (newest first)
+          # 2. Filter for standard semantic versions (vX.Y.Z)
+          # 3. Take the most recent one
+          LATEST_TAG=$(git tag --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
+          
+          if [ -z "$LATEST_TAG" ]; then
+            echo "Error: Could not find a valid stable tag."
+            exit 1
+          fi
+
+          echo "Targeting Stable Version: $LATEST_TAG"
+          
+          # Switch the source code to that specific stable release
+          git checkout $LATEST_TAG
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -24,19 +40,15 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_PASS }}
 
-      - name: Apply Permanent Bypasses
+      - name: Apply Bypasses
         run: |
           AUTH_FILE=evcc_src/util/sponsor/auth.go
           
-          # 1. Force IsAuthorized to always return true
-          sed -i '/func IsAuthorized() bool {/,/^}/c \
-          func IsAuthorized() bool { return true }' $AUTH_FILE
+          # 1. Force authorization functions to return true
+          sed -i '/func IsAuthorized() bool {/,/^}/c \func IsAuthorized() bool { return true }' $AUTH_FILE
+          sed -i '/func IsAuthorizedForApi() bool {/,/^}/c \func IsAuthorizedForApi() bool { return true }' $AUTH_FILE
 
-          # 2. Force IsAuthorizedForApi to always return true
-          sed -i '/func IsAuthorizedForApi() bool {/,/^}/c \
-          func IsAuthorizedForApi() bool { return true }' $AUTH_FILE
-
-          # 3. Patch GetStatus with name "Not sponsored" and a STATIC token
+          # 2. Set "Not sponsored" status with 10-year expiry and static token
           sed -i "/func GetStatus() Status {/,/^}/c \\
           func GetStatus() Status {\\
           	return Status{\\
@@ -47,23 +59,25 @@ jobs:
           	}\\
           }" $AUTH_FILE
 
-          # 4. Clean up the formatting so the Go compiler is happy
+          # Standardize formatting so the Go compiler is happy
           cd evcc_src && go fmt ./util/sponsor/auth.go
 
       - name: Verify Patch Content
         run: |
-          echo "Checking if patch was applied correctly..."
+          echo "Verifying the patched GetStatus function:"
           cat evcc_src/util/sponsor/auth.go | grep -A 10 "func GetStatus()"
 
-      - name: Build and Push Docker Image
+      - name: Build and Push
         run: |
           cd evcc_src
           
+          # Detect the version from the tag we checked out
+          VERSION=$(git describe --tags --always)
           IMAGE_NAME=${{ secrets.DOCKER_IMAGE }}
           
-          # Get the official version tag (e.g. v0.123.0)
-          VERSION=$(git describe --tags --always)
+          echo "Starting Docker build for: $IMAGE_NAME:$VERSION"
           
-          # Run the official build process
+          # Execute the official evcc Makefile docker target
+          # This handles frontend compilation and multi-stage Docker build
           make docker DOCKER_IMAGE=$IMAGE_NAME DOCKER_TAG=$VERSION
           make docker DOCKER_IMAGE=$IMAGE_NAME DOCKER_TAG=latest
