@@ -1,16 +1,35 @@
-- name: Clone and Patch
+name: MAKKIE - Auto-Update Stable Build
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '45 23 * * *'
+
+jobs:
+  check-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout YOUR repo
+        uses: actions/checkout@v4
+
+      - name: Fetch Latest EVCC Version
+        id: get_version
         run: |
-          # Fast clone of the specific version
+          LATEST=$(git ls-remote --tags --sort='-v:refname' https://github.com/evcc-io/evcc.git | grep -E 'refs/tags/[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 | cut -d/ -f3)
+          echo "tag=$LATEST" >> $GITHUB_OUTPUT
+
+      - name: Clone and Patch
+        run: |
           git clone --branch ${{ steps.get_version.outputs.tag }} --depth 1 https://github.com/evcc-io/evcc.git evcc_src
           
           AUTH_FILE=evcc_src/util/sponsor/auth.go
           LOGO_FILE=evcc_src/assets/js/components/Footer/Logo.vue
 
-          # 1. Authorization Bypasses
+          # 1. Auth Bypasses
           sed -i '/func IsAuthorized() bool {/,/^}/c \func IsAuthorized() bool { return true }' $AUTH_FILE
           sed -i '/func IsAuthorizedForApi() bool {/,/^}/c \func IsAuthorizedForApi() bool { return true }' $AUTH_FILE
           
-          # 2. Set "UNCLEAR" Status with proper line continuations
+          # 2. Set "UNCLEAR" Status (Note the double backslashes for shell escaping)
           sed -i "/func GetStatus() Status {/,/^}/c \\
           func GetStatus() Status {\\
           	return Status{\\
@@ -45,31 +64,4 @@
 			fill-rule="nonzero"
 		/>
 		<path
-			d="M88.082 29.071a12.384 12.384 0 01-9-3.42 12.192 12.192 0 01-3.54-9.12v-.64a15.394 15.394 0 011.47-6.83 10.825 10.825 0 014.17-4.64 11.64 11.64 0 016.15-1.63 10.45 10.45 0 018.21 3.26c2 2.194 3 5.297 3 9.31v2.76H82.382a6.348 6.348 0 002 4 5.997 5.997 0 004.16 1.49 7.305 7.305 0 006.1-2.84l3.31 3.73a10 10 0 01-4.13 3.39 13.309 13.309 0 01-5.74 1.18zm-.77-20.84a4.216 4.216 0 00-3.26 1.37 7.141 7.141 0 00-1.6 3.91h9.39v-.55a5.005 5.005 0 00-1.22-3.49 4.304 4.304 0 00-3.31-1.24zM111.452 20.331l4.7-17.09h7l-8.48 25.36h-6.44l-8.52-25.36h7l4.74 17.09z"
-			fill="#fff"
-			class="letter"
-			fill-rule="nonzero"
-		/>
-	</svg>
-</template>
-
-<script lang="ts">
-import { defineComponent } from "vue";
-
-export default defineComponent({
-	name: "Logo",
-});
-</script>
-<style scoped>
-.letter {
-	fill: #1c2445;
-}
-html.dark .letter {
-	fill: var(--bs-white);
-}
-</style>
-EOF
-          fi
-
-          # 4. Format Go file
-          cd evcc_src && go fmt ./util/sponsor/auth.go
+			d="M88.082 29.071a12.384 12.384 0 01-9-3.42 12.192 12.192 0 01-3.54-9.12v-.64a15.394 15.394 0 011.47-6.83 10.825 10.825 0 014.17-4.64 11.64 11.64 0 016.15-1.63 10.45 10.45 0 018.21 3.26c2 2.194 3 5.297 3 9.31v2.76H82.382a6.348 6.348 0 002 4 5.997 5.997 0 004.16 1.49 7.305 7.305 0 006.1-2.84l3.31 3.73a10 10 0 01-4.13 3.39 13.309 13.309 0 01-5.74 1.18zm-.77-20.84a4.216 4.216 0 00-3.26 1.37 7.141 7.141 0 00-1.6 3.91h9.39v-.55a5.005 5.005 0 00-1.22-3.49 4.304 4.304 0 00-3.31-1.24zM11
