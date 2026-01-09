@@ -3,7 +3,7 @@ name: MAKKIE - Auto-Update Stable Build
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 2 * * *' # 2:00 AM UTC daily
+    - cron: '45 23 * * *' # Runs every night at 23:45 UTC
 
 jobs:
   check-and-build:
