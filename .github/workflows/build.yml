@@ -1,4 +1,4 @@
-name: MAKKIE - Stable On-Demand Build
+name: MAKKIE - On-Demand Build
 
 on:
   workflow_dispatch: # Manual trigger only via GitHub Actions tab
@@ -40,9 +40,10 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_PASS }}
 
-      - name: Apply Bypasses
+      - name: Apply Bypasses and UI Changes
         run: |
           AUTH_FILE=evcc_src/util/sponsor/auth.go
+          LOGO_FILE=evcc_src/assets/js/components/Footer/Logo.vue
           
           # 1. Force authorization functions to return true
           sed -i '/func IsAuthorized() bool {/,/^}/c \func IsAuthorized() bool { return true }' $AUTH_FILE
@@ -59,25 +60,29 @@ jobs:
           	}\\
           }" $AUTH_FILE
 
-          # Standardize formatting so the Go compiler is happy
-          cd evcc_src && go fmt ./util/sponsor/auth.go
+          # 3. UI LOGO CHANGE: Green Bolt -> Blue Bolt
+          # Replaces the specific green hex (#0fdd42) from your source with electric blue (#00d2ff)
+          if [ -f "$LOGO_FILE" ]; then
+            sed -i 's/fill="#0fdd42"/fill="#00d2ff"/g' $LOGO_FILE
+            echo "Logo lightning bolt updated to blue."
+          else
+            echo "Warning: Logo.vue not found at $LOGO_FILE"
+          fi
 
-      - name: Verify Patch Content
-        run: |
-          echo "Verifying the patched GetStatus function:"
-          cat evcc_src/util/sponsor/auth.go | grep -A 10 "func GetStatus()"
+          # Standardize formatting for Go files
+          cd evcc_src && go fmt ./util/sponsor/auth.go
 
       - name: Build and Push
         run: |
           cd evcc_src
           
-          # Detect the version from the tag we checked out
+          # Get the version string from the tag we checked out
           VERSION=$(git describe --tags --always)
           IMAGE_NAME=${{ secrets.DOCKER_IMAGE }}
           
-          echo "Starting Docker build for: $IMAGE_NAME:$VERSION"
+          echo "Building Docker image for version: $VERSION"
           
           # Execute the official evcc Makefile docker target
-          # This handles frontend compilation and multi-stage Docker build
+          # This compiles the UI and the Go binary into the Docker image
           make docker DOCKER_IMAGE=$IMAGE_NAME DOCKER_TAG=$VERSION
           make docker DOCKER_IMAGE=$IMAGE_NAME DOCKER_TAG=latest
