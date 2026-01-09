@@ -1,55 +1,36 @@
-name: Apply patches and build
+name: MAKKIE - Auto-Update Stable Build
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *' # 2:00 AM UTC daily
 
 jobs:
-  publish:
+  check-and-build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout YOUR repo
         uses: actions/checkout@v4
 
-      - name: Clone Stable EVCC
+      - name: Fetch Latest EVCC Version
+        id: get_version
         run: |
-          git clone https://github.com/evcc-io/evcc.git evcc_src
-          cd evcc_src
-          git fetch --tags --force
-          
-          LATEST_TAG=$(git tag --sort=-creatordate | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
-          
-          # Fallback to pure version sort if date sort behaves oddly
-          if [ -z "$LATEST_TAG" ]; then
-            LATEST_TAG=$(git tag -l | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
-          fi
-          
-          if [ -z "$LATEST_TAG" ]; then
-            echo "Error: Still could not find a valid tag."
-            exit 1
-          fi
+          # Query the remote repo for the latest stable tag
+          LATEST=$(git ls-remote --tags --sort='-v:refname' https://github.com/evcc-io/evcc.git | grep -E 'refs/tags/[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 | cut -d/ -f3)
+          echo "tag=$LATEST" >> $GITHUB_OUTPUT
+          echo "Latest stable version found: $LATEST"
 
-          echo "Targeting Stable Version: $LATEST_TAG"
-          git checkout $LATEST_TAG
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USER }}
-          password: ${{ secrets.DOCKER_PASS }}
-
-      - name: Apply patches
+      - name: Clone and Patch
         run: |
+          # Specifically clone the tag found in the previous step
+          git clone --branch ${{ steps.get_version.outputs.tag }} --depth 1 https://github.com/evcc-io/evcc.git evcc_src
+          
           AUTH_FILE=evcc_src/util/sponsor/auth.go
           LOGO_FILE=evcc_src/assets/js/components/Footer/Logo.vue
-          
-          # 1. Force authorization functions to return true
+
+          # Apply your specific patches
           sed -i '/func IsAuthorized() bool {/,/^}/c \func IsAuthorized() bool { return true }' $AUTH_FILE
           sed -i '/func IsAuthorizedForApi() bool {/,/^}/c \func IsAuthorizedForApi() bool { return true }' $AUTH_FILE
-
-          # 2. Set "UNCLEAR" status
           sed -i "/func GetStatus() Status {/,/^}/c \\
           func GetStatus() Status {\\
           	return Status{\\
@@ -60,23 +41,23 @@ jobs:
           	}\\
           }" $AUTH_FILE
 
-          # 3. UI LOGO CHANGE: Green Bolt -> Blue Bolt
-          if [ -f "$LOGO_FILE" ]; then
-            sed -i 's/fill="#0fdd42"/fill="#00d2ff"/g' $LOGO_FILE
-            echo "Logo lightning bolt successfully patched to blue."
-          else
-            echo "Error: Logo.vue not found"
-            exit 1
-          fi
-
+          sed -i 's/fill="#0fdd42"/fill="#00d2ff"/g' $LOGO_FILE
           cd evcc_src && go fmt ./util/sponsor/auth.go
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASS }}
 
       - name: Build and Push
         run: |
           cd evcc_src
-          VERSION=$(git describe --tags --always)
+          VERSION=${{ steps.get_version.outputs.tag }}
           IMAGE_NAME=${{ secrets.DOCKER_IMAGE }}
           
-          # Build using Makefile
           make docker DOCKER_IMAGE=$IMAGE_NAME DOCKER_TAG=$VERSION
           make docker DOCKER_IMAGE=$IMAGE_NAME DOCKER_TAG=latest
