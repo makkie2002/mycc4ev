@@ -1,9 +1,9 @@
-name: MAKKIE - Auto-Update Stable Build
+name: Auto-Update Stable Build
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: 
   schedule:
-    - cron: '45 23 * * *' # Runs every night at 23:45 UTC
+    - cron: '45 22 * * *' # Runs every night at 22:45 UTC
 
 jobs:
   check-and-build:
@@ -15,22 +15,24 @@ jobs:
       - name: Fetch Latest EVCC Version
         id: get_version
         run: |
-          # Query the remote repo for the latest stable tag
+          # Query official repo for latest stable tag (X.Y.Z)
           LATEST=$(git ls-remote --tags --sort='-v:refname' https://github.com/evcc-io/evcc.git | grep -E 'refs/tags/[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 | cut -d/ -f3)
           echo "tag=$LATEST" >> $GITHUB_OUTPUT
           echo "Latest stable version found: $LATEST"
 
       - name: Clone and Patch
         run: |
-          # Specifically clone the tag found in the previous step
+          # Fast clone of the specific version
           git clone --branch ${{ steps.get_version.outputs.tag }} --depth 1 https://github.com/evcc-io/evcc.git evcc_src
           
           AUTH_FILE=evcc_src/util/sponsor/auth.go
           LOGO_FILE=evcc_src/assets/js/components/Footer/Logo.vue
 
-          # Apply your specific patches
+          # 1. Authorization Bypasses
           sed -i '/func IsAuthorized() bool {/,/^}/c \func IsAuthorized() bool { return true }' $AUTH_FILE
           sed -i '/func IsAuthorizedForApi() bool {/,/^}/c \func IsAuthorizedForApi() bool { return true }' $AUTH_FILE
+          
+          # 2. Set "UNCLEAR" Status with long expiry
           sed -i "/func GetStatus() Status {/,/^}/c \\
           func GetStatus() Status {\\
           	return Status{\\
@@ -41,7 +43,13 @@ jobs:
           	}\\
           }" $AUTH_FILE
 
-          sed -i 's/fill="#0fdd42"/fill="#00d2ff"/g' $LOGO_FILE
+          # 3. Apply Blue Logo Change (Green #0fdd42 -> Blue #00d2ff)
+          if [ -f "$LOGO_FILE" ]; then
+            sed -i 's/fill="#0fdd42"/fill="#00d2ff"/g' $LOGO_FILE
+            echo "Logo lightning bolt successfully patched to blue."
+          fi
+
+          # 4. Clean up Go formatting
           cd evcc_src && go fmt ./util/sponsor/auth.go
 
       - name: Set up Docker Buildx
@@ -59,5 +67,10 @@ jobs:
           VERSION=${{ steps.get_version.outputs.tag }}
           IMAGE_NAME=${{ secrets.DOCKER_IMAGE }}
           
-          make docker DOCKER_IMAGE=$IMAGE_NAME DOCKER_TAG=$VERSION
-          make docker DOCKER_IMAGE=$IMAGE_NAME DOCKER_TAG=latest
+          # Using the RELEASE=1 build-arg you identified to ensure stable status
+          docker buildx build \
+            --platform linux/amd64 \
+            --tag $IMAGE_NAME:latest \
+            --tag $IMAGE_NAME:$VERSION \
+            --build-arg RELEASE=1 \
+            --push .
