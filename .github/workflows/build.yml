@@ -29,33 +29,15 @@ jobs:
           sed -i '/func IsAuthorized() bool {/,/^}/c \func IsAuthorized() bool { return true }' $AUTH_FILE
           sed -i '/func IsAuthorizedForApi() bool {/,/^}/c \func IsAuthorizedForApi() bool { return true }' $AUTH_FILE
           
-          # 2. Set "UNCLEAR" Status (Simplified to a single line to avoid YAML syntax errors)
+          # 2. Set "UNCLEAR" Status (Single line - safe)
           sed -i '/func GetStatus() Status {/,/^}/c \func GetStatus() Status { return Status{ Name: "UNCLEAR", ExpiresAt: time.Now().AddDate(10, 0, 0), ExpiresSoon: false, Token: "ghp_permanent_unlimited_token" } }' $AUTH_FILE
 
-          # 3. Logo Redesign: cc-bolt-ev with Blue Bolt
+          # 3. Logo Redesign via Base64 (Immune to indentation errors)
           if [ -f "$LOGO_FILE" ]; then
-            cat <<'EOF' > $LOGO_FILE
-<template>
-	<svg viewBox="0 0 122 35" xmlns="http://www.w3.org/2000/svg" fill-rule="evenodd" clip-rule="evenodd" stroke-linejoin="round" stroke-miterlimit="2">
-		<path d="M10.422 23.611a4.444 4.444 0 003-1 3.638 3.638 0 001.22-2.75h6.32a8.668 8.668 0 01-1.4 4.73 9.145 9.145 0 01-3.79 3.3 11.736 11.736 0 01-5.29 1.19 10.912 10.912 0 01-8.54-3.46c-2.087-2.3-3.13-5.483-3.13-9.55v-.45c0-3.9 1.033-7.016 3.1-9.35a10.868 10.868 0 018.51-3.5c2.791-.134 5.524.84 7.6 2.71a9.626 9.626 0 012.9 7.21h-6.3a4.663 4.663 0 00-1.2-3.22 4.005 4.005 0 00-3.08-1.24 4.068 4.068 0 00-3.56 1.73c-.8 1.15-1.2 3-1.2 5.6v.7c0 2.61.39 4.49 1.19 5.63a4.092 4.092 0 003.65 1.72zM35.302 23.611a4.454 4.454 0 003-1 3.63 3.63 0 001.21-2.75h6.33a8.668 8.668 0 01-1.4 4.73 9.143 9.143 0 01-3.73 3.3 11.76 11.76 0 01-5.29 1.18 10.912 10.912 0 01-8.54-3.46c-2.087-2.3-3.13-5.483-3.13-9.55v-.45c0-3.9 1.033-7.016 3.1-9.35a10.85 10.85 0 018.57-3.49 10.575 10.575 0 017.6 2.71 9.598 9.598 0 012.91 7.21h-6.33a4.651 4.651 0 00-1.21-3.22 4.492 4.492 0 00-6.64.49c-.8 1.15-1.21 3-1.21 5.6v.7c0 2.607.4 4.484 1.2 5.63a4.09 4.09 0 003.56 1.72z" fill="#fff" class="letter" fill-rule="nonzero" />
-		<path d="M58.462.751h9.22l-6.14 12.3h6.15l-11.53 21.51 2.3-15.36h-7.68l7.68-18.45z" fill="#00d2ff" fill-rule="nonzero" />
-		<path d="M88.082 29.071a12.384 12.384 0 01-9-3.42 12.192 12.192 0 01-3.54-9.12v-.64a15.394 15.394 0 011.47-6.83 10.825 10.825 0 014.17-4.64 11.64 11.64 0 016.15-1.63 10.45 10.45 0 018.21 3.26c2 2.194 3 5.297 3 9.31v2.76H82.382a6.348 6.348 0 002 4 5.997 5.997 0 004.16 1.49 7.305 7.305 0 006.1-2.84l3.31 3.73a10 10 0 01-4.13 3.39 13.309 13.309 0 01-5.74 1.18zm-.77-20.84a4.216 4.216 0 00-3.26 1.37 7.141 7.141 0 00-1.6 3.91h9.39v-.55a5.005 5.005 0 00-1.22-3.49 4.304 4.304 0 00-3.31-1.24zM111.452 20.331l4.7-17.09h7l-8.48 25.36h-6.44l-8.52-25.36h7l4.74 17.09z" fill="#fff" class="letter" fill-rule="nonzero" />
-	</svg>
-</template>
-
-<script lang="ts">
-import { defineComponent } from "vue";
-export default defineComponent({ name: "Logo" });
-</script>
-
-<style scoped>
-.letter { fill: #1c2445; }
-html.dark .letter { fill: var(--bs-white); }
-</style>
-EOF
+            echo "PHRlbXBsYXRlPjxzdmcgdmlld0JveD0iMCAwIDEyMiAzNSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGNsaXAtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLW1pdGVybGltaXQ9IjIiPjxwYXRoIGQ9Ik0xMC40MjIgMjMuNjExYTQuNDQ0IDQuNDQ0IDAgMDAzLTEgMy42MzggMy42MzggMCAwMDEuMjItMi43NWg2LjMyYTguNjY4IDguNjY4IDAgMDEtMS40IDQuNzMgOS4xNDUgOS4xNDUgMCAwMS0zLjc5IDMuMyAxMS43MzYgMTEuNzM2IDAgMDEtNS4yOSAxLjE5IDEwLjkxMiAxMC45MTIgMCAwMS04LjU0LTMuNDZjLTIuMDg3LTIuMy0zLjEzLTUuNDgzLTMuMTMtOS41NXYtLjQ1YzAtMy45IDEuMDMzLTcuMDE2IDMuMS05LjM1YTEwLjg2OCAxMC44NjggMCAwMTguNTEtMy41YzIuNzkxLS4xMzQgNS41MjQuODQgNy42IDIuNzFhOS42MjYgOS42MjYgMCAwMTIuOSA3LjIxaC02LjNhNC42NjMgNC42NjMgMCAwMC0xLjItMy4yMiA0LjAwNSA0LjAwNSAwIDAwLTMuMDgtMS4yNCA0LjA2OCA0LjA2OCAwIDAwLTMuNTYgMS43M2MtLjggMS4xNS0xLjIgMy0xLjIgNS42di43YzAgMi42MS4zOSA0LjQ5IDEuMTkgNS42M2E0LjA5MiA0LjA5MiAwIDAwMy42NSAxLjcyek0zNS4zMDIgMjMuNjExYTQuNDU0IDQuNDU0IDAgMDAzLTEgMy42MyAzLjYzIDAgMDAxLjIxLTIuNzVoNi4zM2E4LjY2OCA4LjY2OCAwIDAxLTEuNCA0LjczIDkuMTQzIDkuMTQzIDAgMDEtMy43MyAzLjMgMTEuNzYgMTEuNzYgMCAwMS01LjI5IDEuMTggMTAuOTEyIDEwLjkxMiAwIDAxLTguNTQtMy40NmMtMi4wODctMi4zLTMuMTMtNS40ODMtMy4xMy05LjU1di0uNDVjMC0zLjkgMS4wMzMtNy4wMTYgMy4xLTkuMzVhMTAuODUgMTAuODUgMCAwMTguNTctMy40OSAxMC41NzUgMTAuNTc1IDAgMDE3LjYgMi43MSA5LjU5OCA5LjU5OCAwIDAxMi45MSA3LjIxaC02LjMzYTQuNjUxIDQuNjUxIDAgMDAtMS4yMS0zLjIyIDQuNDkyIDQuNDkyIDAgMDAtNi42NC40OWMtLjggMS4xNS0xLjIxIDMtMS4yMSA1LjZ2LjdjMCAyLjYwNy40IDQuNDg0IDEuMiA1LjYzYTQuMDkgNC4wOSAwIDAwMy41NiAxLjcyeiIgZmlsbD0iI2ZmZiIgY2xhc3M9ImxldHRlciIgZmlsbC1ydWxlPSJub256ZXJvIiAvPjxwYXRoIGQ9Ik01OC40NjIuNzUxaDkuMjJsLTYuMTQgMTIuM2g2LjE1bC0xMS41MyAyMS41MSAyLjMtMTUuMzZoLTcuNjhsNy42OC0xOC40NXoiIGZpbGw9IiMwMGQyZmYiIGZpbGwtcnVsZT0ibm9uemVybyIgLz48cGF0aCBkPSJNODguMDgyIDI5LjA3MWExMi4zODQgMTIuMzg0IDAgMDEtOS0zLjQyIDEyLjE5MiAxMi4xOTIgMCAwMS0zLjU0LTkuMTJ2LS42NGExNS4zOTQgMTUuMzk0IDAgMDExLjQ3LTYuODMgMTAuODI1IDEwLjgyNSAwIDAxNC4xNy00LjY0IDExLjY0IDExLjY0IDAgMDE2LjE1LTEuNjMgMTAuNDUgMTAuNDUgMCAwMTguMjEgMy4yNmMyIDIuMTk0IDMgNS4yOTcgMyA5LjMxdjIuNzZIODIuMzgyYTYuMzQ4IDYuMzQ4IDAgMDAyIDQgNS45OTcgNS45OTcgMCAwMDQuMTYgMS40OSA3LjMwNSA3LjMwNSAwIDAwNi4xLTIuODRsMy4zMSAzLjczYTEwIDEwIDAgMDEtNC4xMyAzLjM5IDEzLjMwOSAxMy4zMDkgMCAwMS01Ljc0IDEuMTh6bS0uNzctMjAuODRhNC4yMTYgNC4yMTYgMCAwMC0zLjI2IDEuMzcgNy4xNDEgNy4xNDEgMCAwMC0xLjYgMy45MWg5LjM5di0uNTVhNS4wMDUgNS4wMDUgMCAwMC0xLjIyLTMuNDkgNC4zMDQgNC4zMDQgMCAwMC0zLjMxLTEuMjR6TTExMS40NTIgMjAuMzMxbDQuNy0xNy4wOWg3bC04LjQ4IDI1LjM2aC02LjQ0bC04LjUyLTI1LjM2aDdsNC43NCAxNy4wOXoiIGZpbGw9IiNmZmYiIGNsYXNzPSJsZXR0ZXIiIGZpbGwtcnVsZT0ibm9uemVybyIgLz48L3N2Zz48L3RlbXBsYXRlPjxzY3JpcHQgbGFuZz0idHMiPmltcG9ydCB7IGRlZmluZUNvbXBvbmVudCB9IGZyb20gInZ1ZSI7ZXhwb3J0IGRlZmF1bHQgZGVmaW5lQ29tcG9uZW50KHsgbmFtZTogIkxvZ28iIH0pOzwvc2NyaXB0PjxzdHlsZSBzY29wZWQ+LmxldHRlciB7IGZpbGw6ICMxYzI0NDU7IH1odG1sLmRhcmsgLmxldHRlciB7IGZpbGw6IHZhcigtLWJzLXdoaXRlKTsgfTwvc3R5bGU+" | base64 -d > $LOGO_FILE
           fi
 
-          # 4. Format and clean up
+          # 4. Final Format
           cd evcc_src && go fmt ./util/sponsor/auth.go
 
       - name: Set up Docker Buildx
