@@ -1,7 +1,7 @@
 name: MAKKIE - Stable On-Demand Build
 
 on:
-  workflow_dispatch: # Manual trigger via GitHub Actions tab
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -12,31 +12,25 @@ jobs:
 
       - name: Clone Stable EVCC
         run: |
-          # 1. Standard clone
           git clone https://github.com/evcc-io/evcc.git evcc_src
           cd evcc_src
-          
-          # 2. Force fetch all tags from the remote
           git fetch --tags --force
           
-          # 3. Get the latest tag sorted by creator date (newest first)
-          # Filter for standard semantic versions (vX.Y.Z)
-          LATEST_TAG=$(git tag --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
+          # UPDATED FILTER: Removed the mandatory 'v' prefix requirement
+          # This matches 0.300.3, 0.209.8, etc.
+          LATEST_TAG=$(git tag --sort=-creatordate | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
           
-          # Fallback to version sort if date sort is empty
+          # Fallback to pure version sort if date sort behaves oddly
           if [ -z "$LATEST_TAG" ]; then
-            LATEST_TAG=$(git tag -l "v*" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+            LATEST_TAG=$(git tag -l | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
           fi
           
           if [ -z "$LATEST_TAG" ]; then
-            echo "Error: Could not find any tags. Printing all tags for debug:"
-            git tag
+            echo "Error: Still could not find a valid tag."
             exit 1
           fi
 
           echo "Targeting Stable Version: $LATEST_TAG"
-          
-          # 4. Switch the source code to that specific stable release
           git checkout $LATEST_TAG
 
       - name: Set up Docker Buildx
@@ -57,7 +51,7 @@ jobs:
           sed -i '/func IsAuthorized() bool {/,/^}/c \func IsAuthorized() bool { return true }' $AUTH_FILE
           sed -i '/func IsAuthorizedForApi() bool {/,/^}/c \func IsAuthorizedForApi() bool { return true }' $AUTH_FILE
 
-          # 2. Set "Not sponsored" status with 10-year expiry
+          # 2. Set "Not sponsored" status
           sed -i "/func GetStatus() Status {/,/^}/c \\
           func GetStatus() Status {\\
           	return Status{\\
@@ -69,28 +63,22 @@ jobs:
           }" $AUTH_FILE
 
           # 3. UI LOGO CHANGE: Green Bolt -> Blue Bolt
-          # Replaces your provided green hex (#0fdd42) with electric blue (#00d2ff)
           if [ -f "$LOGO_FILE" ]; then
             sed -i 's/fill="#0fdd42"/fill="#00d2ff"/g' $LOGO_FILE
             echo "Logo lightning bolt successfully patched to blue."
           else
-            echo "Error: Logo.vue not found at $LOGO_FILE"
+            echo "Error: Logo.vue not found"
             exit 1
           fi
 
-          # Standardize formatting for Go files
           cd evcc_src && go fmt ./util/sponsor/auth.go
 
       - name: Build and Push
         run: |
           cd evcc_src
-          
-          # Determine the version name for Docker tagging
           VERSION=$(git describe --tags --always)
           IMAGE_NAME=${{ secrets.DOCKER_IMAGE }}
           
-          echo "Building and Pushing version: $VERSION"
-          
-          # Run the official Makefile build process
+          # Build using Makefile
           make docker DOCKER_IMAGE=$IMAGE_NAME DOCKER_TAG=$VERSION
           make docker DOCKER_IMAGE=$IMAGE_NAME DOCKER_TAG=latest
