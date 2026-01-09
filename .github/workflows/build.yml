@@ -2,8 +2,6 @@ name: MAKKIE - Permanent Static Build
 
 on:
   workflow_dispatch: # Allows manual triggering
-  schedule:
-    - cron: '0 0 * * *' # Builds every night at midnight to stay updated
 
 jobs:
   publish:
