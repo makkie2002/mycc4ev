@@ -1,4 +1,4 @@
-name: MAKKIE - Stable On-Demand Build
+name: Apply patches and build
 
 on:
   workflow_dispatch:
@@ -16,8 +16,6 @@ jobs:
           cd evcc_src
           git fetch --tags --force
           
-          # UPDATED FILTER: Removed the mandatory 'v' prefix requirement
-          # This matches 0.300.3, 0.209.8, etc.
           LATEST_TAG=$(git tag --sort=-creatordate | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
           
           # Fallback to pure version sort if date sort behaves oddly
@@ -42,7 +40,7 @@ jobs:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_PASS }}
 
-      - name: Apply Bypasses and UI Changes
+      - name: Apply patches
         run: |
           AUTH_FILE=evcc_src/util/sponsor/auth.go
           LOGO_FILE=evcc_src/assets/js/components/Footer/Logo.vue
@@ -51,14 +49,14 @@ jobs:
           sed -i '/func IsAuthorized() bool {/,/^}/c \func IsAuthorized() bool { return true }' $AUTH_FILE
           sed -i '/func IsAuthorizedForApi() bool {/,/^}/c \func IsAuthorizedForApi() bool { return true }' $AUTH_FILE
 
-          # 2. Set "Not sponsored" status
+          # 2. Set "UNCLEAR" status
           sed -i "/func GetStatus() Status {/,/^}/c \\
           func GetStatus() Status {\\
           	return Status{\\
-          		Name:        \"Not sponsored\",\\
+          		Name:        \"UNCLEAR\",\\
           		ExpiresAt:   time.Now().AddDate(10, 0, 0),\\
           		ExpiresSoon: false,\\
-          		Token:       \"ghp_permanent_token_makkie_unlimited\",\\
+          		Token:       \"ghp_permanent_unlimited_token\",\\
           	}\\
           }" $AUTH_FILE
 
