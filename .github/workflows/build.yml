@@ -15,47 +15,55 @@ jobs:
       - name: Fetch latest EVCC version
         id: get_version
         run: |
+          # Fetch the latest stable semantic version tag from the official repo
           LATEST=$(git ls-remote --tags --sort='-v:refname' https://github.com/evcc-io/evcc.git | grep -E 'refs/tags/[0-9]+\.[0-9]+\.[0-9]+$' 2>/dev/null | head -n 1 | cut -d/ -f3)
           echo "tag=$LATEST" >> $GITHUB_OUTPUT
 
+      - name: Check if build is needed
+        id: check_hub
+        run: |
+          IMAGE="${{ secrets.DOCKER_IMAGE }}"
+          TAG="${{ steps.get_version.outputs.tag }}"
+          
+          # Get a token to talk to Docker Hub API
+          TOKEN=$(curl -s "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$IMAGE:pull" | jq -r .token)
+          # Check if the specific version tag already exists
+          RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "https://index.docker.io/v2/$IMAGE/manifests/$TAG")
+          
+          if echo "$RESPONSE" | jq -e '.errors' > /dev/null; then
+            echo "needed=true" >> $GITHUB_OUTPUT
+            echo "New version $TAG not found on Hub. Proceeding with build..."
+          else
+            echo "needed=false" >> $GITHUB_OUTPUT
+            echo "Version $TAG already exists on Docker Hub. Skipping."
+          fi
+
       - name: Clone and Patch
+        # Only runs if version is new OR if you trigger it manually
+        if: steps.check_hub.outputs.needed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           git clone --branch ${{ steps.get_version.outputs.tag }} --depth 1 https://github.com/evcc-io/evcc.git evcc_src
           
           AUTH_FILE=evcc_src/util/sponsor/auth.go
-          LOGO_FILE=evcc_src/assets/js/components/Footer/Logo.vue
-
-          # 1. Sponsorship Bypasses
           sed -i '/func IsAuthorized() bool {/,/^}/c \func IsAuthorized() bool { return true }' $AUTH_FILE
           sed -i '/func IsAuthorizedForApi() bool {/,/^}/c \func IsAuthorizedForApi() bool { return true }' $AUTH_FILE
           sed -i '/func GetStatus() Status {/,/^}/c \func GetStatus() Status { return Status{ Name: "【ツ】", ExpiresAt: time.Now().AddDate(20, 0, 0), ExpiresSoon: false, Token: "ghp_permanent_unlimited_token" } }' $AUTH_FILE
-
-          # 2. Logo Redesign (Cleaned Base64)
-          if [ -f "$LOGO_FILE" ]; then
-            B64_DATA="PHRlbXBsYXRlPjxzdmcgdmlld0JveD0iMCAwIDE1MCAzNSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGNsaXAtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLW1pdGVybGltaXQ9IjIiPjxwYXRoIGQ9Ik0xMC40MjIgMjMuNjExYTQuNDQ0IDQuNDQ0IDAgMDAzLTEgMy42MzggMy42MzggMCAwMDEuMjItMi43NWg2LjMyYTguNjY4IDguNjY4IDAgMDEtMS40IDQuNzMgOS4xNDUgOS4xNDUgMCAwMS0zLjc5IDMuMyAxMS43MzYgMTEuNzM2IDAgMDEtNS4yOSAxLjE5IDEwLjkxMiAxMC45MTIgMCAwMS04LjU0LTMuNDZjLTIuMDg3LTIuMy0zLjEzLTUuNDgzLTMuMTMtOS41NXYtLjQ1YzAtMy45IDEuMDMzLTcuMDE2IDMuMS05LjM1YTEwLjg2OCAxMC44NjggMCAwMTguNTEtMy41YzIuNzkxLS4xMzQgNS41MjQuODQgNy42IDIuNzFhOS42MjYgOS42MjYgMCAwMTIuOSA3LjIxaC02LjNhNC42NjMgNC42NjMgMCAwMC0xLjItMy4yMiA0LjAwNSA0LjAwNSAwIDAwLTMuMDgtMS4yNCA0LjA2OCA0LjA2OCAwIDAwLTMuNTYgMS43M2MtLjggMS4xNS0xLjIgMy0xLjIgNS42di43YzAgMi42MS4zOSA0LjQ5IDEuMTkgNS42M2E0LjA5MiA0LjA5MiAwIDAwMy42NSAxLjcyek0zNS4zMDIgMjMuNjExYTQuNDU0IDQuNDQ0IDAgMDAzLTEgMy42MyAzLjYzIDAgMDAxLjIxLTIuNzVoNi4zM2E4LjY2OCA4LjY2OCAwIDAxLTEuNCA0LjczIDkuMTQzIDkuMTQzIDAgMDEtMy43MyAzLjMgMTEuNzYgMTEuNzYgMCAwMS01LjI5IDEuMTggMTAuOTEyIDEwLjkxMiAwIDAxLTguNTQtMy40NmMtMi4wODctMi4zLTMuMTMtNS40ODMtMy4xMy05LjU1di0uNDVjMC0zLjkgMS4wMzMtNy4wMTYgMy4xLTkuMzVhMTAuODUgMTAuODUgMCAwMTguNTctMy40OSAxMC41NzUgMTAuNTc1IDAgMDE3LjYgMi43MSA5LjU5OCA5LjU5OCAwIDAxMi45MSA3LjIxaC02LjMzYTQuNjUxIDQuNjUxIDAgMDAtMS4yMS0zLjIyIDQuNDkyIDQuNDkyIDAgMDAtNi42NC40OWMtLjggMS4xNS0xLjIxIDMtMS4yMSA1LjZ2LjdjMCAyLjYwNy40IDQuNDg0IDEuMiA1LjYzYTQuMDkgNC4wOSAwIDAwMy41NiAxLjcyeiIgZmlsbD0iI2ZmZiIgY2xhc3M9ImxldHRlciIgZmlsbC1ydWxlPSJub256ZXJvIiAvPjxwYXRoIGQ9Ik01OC40NjIuNzUxaDkuMjJsLTYuMTQgMTIuM2g2LjE1bC0xLjUzIDIxLjUxIC0zLjctMTUuMzZoLTExLjY4IGw3LjY4LTE4LjQ1eiIgZmlsbD0iIzAwZDJmZiIgZmlsbC1ydWxlPSJub256ZXJvIiAvPjxwYXRoIGQ9Ik04OC4wODIgMjkuMDcxYTEyLjM4NCAxMi4zODQgMCAwMS05LTMuNDIgMTIuMTkyIDEyLjE5MiAwIDAxLTMuNTQtOS4xMnYtLjY0YTE1LjM5NCAxNS4zOTQgMCAwMTEuNDctNi44MyAxMC44MjUgMTAuODI1IDAgMDE0LjE3LTQuNjQgMTEuNjQgMTEuNjQgMCAwMTYuMTUtMS42MyAxMC40NSAxMC40NSAwIDAxOC4yMSAzLjI2YzIgMi4xOTQgMyA1LjI5NyAzIDkuMzF2Mi43Nkg4Mi4zODJhNi4zNDggNi4zNDggMCAwMDIgNCA1Ljk5NyA1Ljk5NyAwIDAwNC4xNiAxLjQ5IDcuMzA1IDcuMzA1IDAgMDA2LjEtMi44NGwzLjMxIDMuNzNhMTAgMTAgMCAwMS00LjExIDMuMzkgMTMuMzA5IDEzLjMwOSAwIDAxLTUuNzQgMS4xOHptLS43Ny0yMC44YTargetLjIxNiA0LjIxNiAwIDAwLTMuMjYgMS4zNyA3LjE0MSA3LjE0MSAwIDAwLTEuNiAzLjkxaDkuMzl2LS41NWE1LjAwNSA1LjAwNSAwIDAwLTEuMjItMy40OSA0LjMwNCA0LjMwNCAwIDAwLTMuMzEtMS4yNHpNMTExLjQ1MiAyMC4zMxbDQuNy0xNy4wOWg3bC04LjQ4IDI1LjM2aC02LjQ0bC04LjUyLTI1LjM2aDdsNC43NCAxNy4wOXoiIGZpbGw9IiNmZmYiIGNsYXNzPSJsZXR0ZXIiIGZpbGwtcnVsZT0ibm9uemVybyIgLz48L3N2Zz48L3RlbXBsYXRlPjxzY3JpcHQgbGFuZz0idHMiPmltcG9ydCB7IGRlZmluZUNvbXBvbmVudCB9IGZyb20gInZ1ZSI7ZXhwb3J0IGRlZmF1bHQgZGVmaW5lQ29tcG9uZW50KHsgbmFtZTogIkxvZ28iIH0pOzwvc2NyaXB0PjxzdHlsZSBzY29wZWQ+LmxldHRlciB7IGZpbGw6ICMxYzI0NDU7IH1odG1sLmRhcmsgLmxldHRlciB7IGZpbGw6IHZhcigtLWJzLXdoaXRlKTsgfTwvc3R5bGU+"
-            echo "$B64_DATA" | tr -d '[:space:]' | base64 -d > $LOGO_FILE
-          fi
           
-          # 3. Clean up the Go code
           cd evcc_src && go fmt ./util/sponsor/auth.go
 
-      - name: Inject Custom Logo
-        run: |
-          LOGO_FILE=evcc_src/assets/js/components/Footer/Logo.vue
-          if [ -f "$LOGO_FILE" ]; then
-            echo "PHRlbXBsYXRlPjxzdmcgdmlld0JveD0iMCAwIDE1MCAzNSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGNsaXAtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLW1pdGVybGltaXQ9IjIiPjxwYXRoIGQ9Ik0xMC40MjIgMjMuNjExYTQuNDQ0IDQuNDQ0IDAgMDAzLTEgMy42MzggMy42MzggMCAwMDEuMjItMi43NWg2LjMyYTguNjY4IDguNjY4IDAgMDEtMS40IDQuNzMgOS4xNDUgOS4xNDUgMCAwMS0zLjc5IDMuMyAxMS43MzYgMTEuNzM2IDAgMDEtNS4yOSAxLjE5IDEwLjkxMiAxMC45MTIgMCAwMS04LjU0LTMuNDZjLTIuMDg3LTIuMy0zLjEzLTUuNDgzLTMuMTMtOS41NXYtLjQ1YzAtMy45IDEuMDMzLTcuMDE2IDMuMS05LjM1YTEwLjg2OCAxMC44NjggMCAwMTguNTEtMy41YzIuNzkxLS4xMzQgNS41MjQuODQgNy42IDIuNzFhOS42MjYgOS42MjYgMCAwMTIuOSA3LjIxaC02LjNhNC42NjMgNC42NjMgMCAwMC0xLjItMy4yMiA0LjAwNSA0LjAwNSAwIDAwLTMuMDgtMS4yNCA0LjA2OCA0LjA2OCAwIDAwLTMuNTYgMS43M2MtLjggMS4xNS0xLjIgMy0xLjIgNS42di43YzAgMi42MS4zOSA0LjQ5IDEuMTkgNS42M2E0LjA5MiA0LjA5MiAwIDAwMy42NSAxLjcyek0zNS4zMDIgMjMuNjExYTQuNDU0IDQuNDQ0IDAgMDAzLTEgMy42MyAzLjYzIDAgMDAxLjIxLTIuNzVoNi4zM2E4LjY2OCA4LjY2OCAwIDAxLTEuNCA0LjczIDkuMTQzIDkuMTQzIDAgMDEtMy43MyAzLjMgMTEuNzYgMTEuNzYgMCAwMS01LjI5IDEuMTggMTAuOTEyIDEwLjkxMiAwIDAxLTguNTQtMy40NmMtMi4wODctMi4zLTMuMTMtNS40ODMtMy4xMy05LjU1di0uNDVjMC0zLjkgMS4wMzMtNy4wMTYgMy4xLTkuMzVhMTAuODUgMTAuODUgMCAwMTguNTctMy40OSAxMC41NzUgMTAuNTc1IDAgMDE3LjYgMi43MSA5LjU5OCA5LjU5OCAwIDAxMi45MSA3LjIxaC02LjMzYTQuNjUxIDQuNjUxIDAgMDAtMS4yMS0zLjIyIDQuNDkyIDQuNDkyIDAgMDAtNi42NC40OWMtLjggMS4xNS0xLjIxIDMtMS4yMSA1LjZ2LjdjMCAyLjYwNy40IDQuNDg0IDEuMiA1LjYzYTQuMDkgNC4wOSAwIDAwMy41NiAxLjcyeiIgZmlsbD0iI2ZmZiIgY2xhc3M9ImxldHRlciIgZmlsbC1ydWxlPSJub256ZXJvIiAvPjxwYXRoIGQ9Ik01OC40NjIuNzUxaDkuMjJsLTYuMTQgMTIuM2g2LjE1bC0xLjUzIDIxLjUxIC0zLjctMTUuMzZoLTExLjY4IGw3LjY4LTE4LjQ1eiIgZmlsbD0iIzAwZDJmZiIgZmlsbC1ydWxlPSJub256ZXJvIiAvPjxwYXRoIGQ9Ik04OC4wODIgMjkuMDcxYTEyLjM4NCAxMi4zODQgMCAwMS05LTMuNDIgMTIuMTkyIDEyLjE5MiAwIDAxLTMuNTQtOS4xMnYtLjY0YTE1LjM5NCAxNS4zOTQgMCAwMTEuNDctNi44MyAxMC44MjUgMTAuODI1IDAgMDE0LjE3LTQuNjQgMTEuNjQgMTEuNjQgMCAwMTYuMTUtMS42MyAxMC40NSAxMC40NSAwIDAxOC4yMSAzLjI2YzIgMi4xOTQgMyA1LjI5NyAzIDkuMzF2Mi43Nkg4Mi4zODJhNi4zNDggNi4zNDggMCAwMDIgNCA1Ljk5NyA1Ljk5NyAwIDAwNC4xNiAxLjQ5IDcuMzA1IDcuMzA1IDAgMDA2LjEtMi44NGwzLjMxIDMuNzNhMTAgMTAgMCAwMS00LjExIDMuMzkgMTMuMzA5IDEzLjMwOSAwIDAxLTUuNzQgMS4xOHptLS43Ny0yMC44YTargetLjIxNiA0LjIxNiAwIDAwLTMuMjYgMS4zNyA3LjE0MSA3LjE0MSAwIDAwLTEuNiAzLjkxaDkuMzl2LS41NWE1LjAwNSA1LjAwNSAwIDAwLTEuMjItMy40OSA0LjMwNCA0LjMwNCAwIDAwLTMuMzEtMS4yNHpNMTExLjQ1MiAyMC4zMxbDQuNy0xNy4wOWg3bC04LjQ4IDI1LjM2aC02LjQ0bC04LjUyLTI1LjM2aDdsNC43NCAxNy4wOXoiIGZpbGw9IiNmZmYiIGNsYXNzPSJsZXR0ZXIiIGZpbGwtcnVsZW09Im5vbnplcm8iIC8+PC9zdmc+PC90ZW1wbGF0ZT48c2NyaXB0IGxhbmc9InRzIj5pbXBvcnQgeyBkZWZpbmVDb21wb25lbnQgfSBmcm9tICJ2dWUiO2V4cG9ydCBkZWZhdWx0IGRlZmluZUNvbXBvbmVudCh7IG5hbWU6ICJMb2dvIiB9KTs8L3NjcmlwdD48c3R5bGUgc2NvcGVkPi5sZXR0ZXIgeyBmaWxsOiAjMWMyNDQ1OyB9aHRtbC5kYXJrIC5sZXR0ZXIgeyBmaWxsOiB2YXIoLS1icy13aGl0ZSk7IH08L3N0eWxlPg==" | base64 -d > $LOGO_FILE
-          fi
-
       - name: Set up Docker Buildx
+        if: steps.check_hub.outputs.needed == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
+        if: steps.check_hub.outputs.needed == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_PASS }}
 
       - name: Build and Push
+        if: steps.check_hub.outputs.needed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           cd evcc_src
           VERSION=${{ steps.get_version.outputs.tag }}
