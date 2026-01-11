@@ -3,7 +3,7 @@ name: Auto-update stable build
 on:
   workflow_dispatch:
   schedule:
-    - cron: '00 23 * * *'
+    - cron: '55 11 * * *'
 
 jobs:
   check-and-build:
